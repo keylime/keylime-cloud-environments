@@ -1,0 +1,76 @@
+---
+- hosts: localhost 
+  gather_facts: no
+  connection: local
+  vars:
+    - gcp_project: "{{ lookup('ansible.builtin.env','GCP_PROJECT') }}"
+    - gcp_cred_kind: "{{ lookup('ansible.builtin.env','GCP_CRED_KIND') }}"
+    - gcp_cred_file: "{{ lookup('ansible.builtin.env','GCP_CRED_FILE') }}"
+    - gcp_cred_email: "{{ lookup('ansible.builtin.env','GCP_CRED_EMAIL') }}"
+    - zone: "{{ lookup('ansible.builtin.env','GCP_ZONE') }}"
+    - region: "{{ lookup('ansible.builtin.env','GCP_REGION') }}"
+  tasks:
+    - name: Create disk mapped from Fedora image
+      google.cloud.gcp_compute_disk:
+        name: disk-instance
+        size_gb: 50
+        source_image: /projects/fedora-cloud/global/images/fedora-cloud-base-gcp-35-1-2-x86-64
+        zone: "{{ zone }}"
+        project: "{{ gcp_project }}"
+        auth_kind: "{{ gcp_cred_kind }}"
+        service_account_file: "{{ gcp_cred_file }}"
+        scopes:
+          - https://www.googleapis.com/auth/compute
+        state: present
+      register: disk
+
+    - name: Create IPv4 public instance address
+      google.cloud.gcp_compute_address:
+        name: address-instance
+        region: "{{ region }}"
+        project: "{{ gcp_project }}"
+        auth_kind: "{{ gcp_cred_kind }}"
+        service_account_file: "{{ gcp_cred_file }}"
+        scopes:
+          - https://www.googleapis.com/auth/compute
+        state: present
+      register: address
+
+    - name: Create the Fedora instance
+      google.cloud.gcp_compute_instance:
+        name: keylime
+        machine_type: e2-medium
+        disks:
+          - auto_delete: 'true'
+            boot: 'true'
+            source: "{{ disk }}"
+        shielded_instance_config:
+          enable_integrity_monitoring: 'no'
+          enable_secure_boot: 'no'
+          enable_vtpm: 'yes'
+        network_interfaces:
+        - network: null
+          access_configs:
+          - name: External NAT
+            nat_ip: "{{ address }}"
+            type: ONE_TO_ONE_NAT
+        zone: "{{ zone }}"
+        project: "{{ gcp_project }}"
+        auth_kind: "{{ gcp_cred_kind }}"
+        service_account_file: "{{ gcp_cred_file }}"
+        service_accounts:
+        - email: "{{ gcp_cred_email }}"
+          scopes:
+            - https://www.googleapis.com/auth/devstorage.read_only
+            - https://www.googleapis.com/auth/logging.write
+            - https://www.googleapis.com/auth/monitoring.write
+            - https://www.googleapis.com/auth/service.management.readonly
+            - https://www.googleapis.com/auth/servicecontrol
+            - https://www.googleapis.com/auth/trace.append
+        state: present
+        status: RUNNING
+    
+    - name: Show instance details
+      debug:
+        msg: "New GCP instance accessible at {{ address.address }}."
+
