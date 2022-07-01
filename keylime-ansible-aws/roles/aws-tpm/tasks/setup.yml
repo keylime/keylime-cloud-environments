@@ -1,0 +1,226 @@
+- name: Update packages
+  dnf:
+      name: "*"
+      state: latest
+
+- name: Install prerequisite packages
+  dnf:
+      name:
+        - gdisk 
+        - parted
+        - dosfstools
+        - sgdisk
+      state: latest
+
+- name: Convert root volume from MBR to GPT, BIOS partition
+  shell: "sgdisk /dev/nvme1n0 -n=2:34:2047 -t ef02"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Reload partition table 
+  shell: "partprobe /dev/nvme1n0"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Create EFI parition 
+  shell: "sgdisk /dev/nvme1n1 -n=1:0:0"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Reload partition table 
+  shell: "partprobe /dev/nvme1n1"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Build file system for the EFI system partition
+  shell: "mkfs.vfat  /dev/nvme1n1p1"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Mount the EFI system partition to /boot/efi 
+  shell: "mount /dev/nvme1n1p1 /boot/efi"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Install the bootloader
+  dnf:
+      name:
+        - grub2-efi
+        - grub2-efi-modules
+        - shim 
+      state: latest
+
+- name: Create grub configurations
+  shell: "grub2-mkconfig -o /boot/grub2/grub.cfg"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Install dependencies for making keys and signing binaries
+  dnf:
+      name:
+        - efitools
+        - keyutils
+        - mokutil
+        - openssl
+        - pesign 
+        - sbsigntools
+        - kernel-devel-$(uname -r)
+        - git 
+      state: latest
+
+- name: Generate random GUID
+  shell: "uuidgen --random > GUID.txt"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Create platform key PK 
+  shell: 'openssl req -newkey rsa:4096 -nodes -keyout PK.key -new -x509 -sha256 -days 3650 -subj "/CN=Platform key/" -out PK.crt 2>/dev/null'
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Sign platform key PK 
+  shell: "openssl x509 -outform DER -in PK.crt -out PK.cer"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Add PK cert to EFI sign list 
+  shell: 'cert-to-efi-sig-list -g "$(< GUID.txt)" PK.crt PK.esl'
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Sign EFI signature list with PK 
+  shell: 'sign-efi-sig-list -g "$(< GUID.txt)" -k PK.key -c PK.crt PK PK.esl PK.auth'
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Create exchange key EK 
+  shell: 'openssl req -newkey rsa:4096 -nodes -keyout KEK.key -new -x509 -sha256 -days 3650 -subj "/CN=Key Exchange Key/" -out KEK.crt 2>/dev/null'
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Sign exchange key EK 
+  shell: "openssl x509 -outform DER -in KEK.crt -out KEK.cer"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Add EK cert to EFI sign list 
+  shell: 'cert-to-efi-sig-list -g "$(< GUID.txt)" KEK.crt KEK.esl'
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Sign EFI signature list with PK 
+  shell: 'sign-efi-sig-list -g "$(< GUID.txt)" -k PK.key -c PK.crt KEK KEK.esl KEK.auth'
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Create signature allowed database DB 
+  shell: 'openssl req -newkey rsa:4096 -nodes -keyout db.key -new -x509 -sha256 -days 3650 -subj "/CN=Signature Database key/" -out db.crt 2>/dev/null'
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Sign DB
+  shell: "openssl x509 -outform DER -in db.crt -out db.cer"
+  args: 
+    chdir: /root/
+  changed_when: false
+
+- name: Add DB cert to EFI sign list 
+  shell: 'cert-to-efi-sig-list -g "$(< GUID.txt)" db.crt db.esl'
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Sign EFI signature list with KEK 
+  shell: 'sign-efi-sig-list -g "$(< GUID.txt)" -k KEK.key -c KEK.crt db db.esl db.auth'
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Create signature disallowed database DBX
+  shell: 'openssl req -newkey rsa:4096 -nodes -keyout dbx.key -new -x509 -sha256 -days 3650 -subj "/CN=Signature Excluded Database key/" -out dbx.crt 2>/dev/null'
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Sign DBX
+  shell: "openssl x509 -outform DER -in dbx.crt -out dbx.cer"
+  args: 
+    chdir: /root/
+  changed_when: false
+
+- name: Add DBX cert to EFI sign list 
+  shell: 'cert-to-efi-sig-list -g "$(< GUID.txt)" dbx.crt dbx.esl'
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Sign EFI signature list with KEK 
+  shell: 'sign-efi-sig-list -g "$(< GUID.txt)" -k KEK.key -c KEK.crt dbx dbx.esl dbx.auth'
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Clone awslabs/python-uefivars
+  git:
+    repo: https://github.com/kawslabs/python-uefivars
+    dest: /root/python-uefivars
+
+- name: Install awslabs/python-uefivars requirments
+  shell: "/usr/bin/pip3 install  crc32c"
+  args:
+    chdir: /root/python-uefivars
+  changed_when: false
+
+- name: Create blob to export keys
+  shell: "./python-uefivars/uefivars.py -i none -o aws -O blob.bin -P PK.esl -K KEK.esl --db db.esl --dbx dbx.esl"
+  args:
+    chdir: /root/
+  changed_when: false
+
+
+- name: Sign fedora/shimx64
+  shell: "sbsign --key db.key --cert db.crt     --output /boot/efi/EFI/fedora/shimx64.efi     /boot/efi/EFI/fedora/shimx64.efi"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Sign kernel
+  shell: "sbsign --key db.key --cert db.crt     --output /boot/vmlinuz-$(uname -r)     /boot/vmlinuz-$(uname -r)"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Sign fedora/grubx64
+  shell: "sbsign --key db.key --cert db.crt     --output /boot/efi/EFI/fedora/grubx64.efi     /boot/efi/EFI/fedora/grubx64.efi"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Sign fedora/mm64
+  shell: "sbsign --key db.key --cert db.crt     --output /boot/efi/EFI/fedora/mmx64.efi     /boot/efi/EFI/fedora/mmx64.efi"
+  args:
+    chdir: /root/
+  changed_when: false
+
+- name: Sign fedora/shim 
+  shell: "sbsign --key db.key --cert db.crt     --output /boot/efi/EFI/fedora/shim.efi     /boot/efi/EFI/fedora/shim.efi"
+  args:
+    chdir: /root/
+  changed_when: false

@@ -1,0 +1,48 @@
+---
+# Requirements
+dependencies:
+  ['PyYAML',
+   'autoconf',
+   'autoconf-archive',
+   'automake',
+   'compat-openssl10-devel',
+   'dbus-devel',
+   'gcc',
+   'git',
+   'glib2-devel',
+   'keylime',
+   'libcurl-devel',
+   'libgcrypt-devel',
+   'libstdc++-devel',
+   'libtool',
+   'libffi-devel',
+   'pkg-config',
+   'python3-cryptography',
+   'python3-devel',
+   'python3-yaml',
+   'python3-simplejson',
+   'python3-sqlalchemy',
+   'python3-alembic',
+   'redhat-rpm-config',
+   'tpm2-tools',
+   'tpm2-tss',
+   'uriparser-devel',
+   'efivar-devel']
+
+# Section for vars
+shell_profiles:
+  - .bash_profile
+
+cargo_enabled: true
+cargo_packages:
+  - name: client
+    git: https://github.com/tonarino/innernet
+    tag: v1.5.0
+  - name: server
+    git: https://github.com/tonarino/innernet
+    tag: v1.5.0
+
+# Kernel resource manager
+os_environment:
+  - key: TPM2TOOLS_TCTI
+    value : "device:/dev/tpm0"
