@@ -1,0 +1,18 @@
+- name: Run Rust-Keylime Makefile
+  shell: "make && make install"
+  args:
+    chdir: /root/rust-keylime
+  changed_when: false
+
+- name: Run Cargo build
+  shell: "cargo build"
+  args:
+    chdir: /root/rust-keylime
+  changed_when: false
+
+- name: Set TPM2TOOLS_TCTI environment variable
+  lineinfile:
+    dest: /etc/environment
+    state: present
+    regexp: '^TPM2TOOLS_TCTI'
+    line: 'TPM2TOOLS_TCTI="device:/dev/tpmrm0"'

@@ -1,0 +1,8 @@
+- name: Clone Keylime
+  git:
+    repo: https://github.com/keylime/keylime
+    dest: /root/keylime
+- name: Clone Rust-Keylime
+  git:
+    repo: https://github.com/keylime/rust-keylime
+    dest: /root/rust-keylime

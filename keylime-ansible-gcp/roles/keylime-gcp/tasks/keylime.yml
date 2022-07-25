@@ -1,0 +1,63 @@
+- name: Install keylime requirment
+  shell: "/usr/bin/pip3 install -r requirements.txt"
+  args:
+    chdir: /root/keylime
+  changed_when: false
+
+- name: Run python setup tools to setup Keylime
+  shell: "/usr/bin/python3 setup.py install"
+  args:
+    chdir: /root/keylime
+  changed_when: false
+
+- name: Run Keylime installer
+  shell: "./installer.sh"
+  args:
+    chdir: /root/keylime
+  changed_when: false
+
+- name: Move keylime.conf into default location
+  copy:
+    src: /root/keylime/keylime.conf
+    dest: /etc
+    mode: 0644
+    remote_src: yes
+  changed_when: false
+
+- name: Change require_ek_cert to false
+  lineinfile:
+    path: /etc/keylime.conf
+    regexp: '^require_ek_cert'
+    line: require_ek_cert = False
+  changed_when: false
+
+- name: Change tpm_hash_alg to sha256
+  lineinfile:
+    path: /etc/keylime.conf
+    regexp: '^tpm_hash_alg'
+    line: tpm_hash_alg = sha256
+  changed_when: false  
+
+- name: Create allow list
+  shell: "./scripts/create_allowlist.sh /root/allowlist.txt sha256sum"
+  args:
+    chdir: /root/keylime
+  when: custom_config|bool == False
+
+- name: Create exclude list
+  copy:
+    dest: "/root/exclude.txt"
+    content: |
+      /tmp*
+      /var/log*
+      /usr/bin/*
+      /usr/sbin/*
+      /usr/local/bin/*
+      /usr/share/*
+      /usr/lib/*
+      /usr/lib64/*
+      /usr/libexec/*
+      /etc/*
+      /root/keylime
+      /root/rust-keylime
+  when: custom_config|bool== False

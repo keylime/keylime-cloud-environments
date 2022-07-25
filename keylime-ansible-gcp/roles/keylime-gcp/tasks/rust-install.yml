@@ -1,0 +1,9 @@
+- name: Install Rust 
+  shell: "curl https://sh.rustup.rs -sSf | sh -s -- -y"
+  changed_when: false
+
+- name: Set source $HOME
+  shell: "source $HOME/.cargo/env"
+  args:
+    chdir: /root/
+  changed_when: false  

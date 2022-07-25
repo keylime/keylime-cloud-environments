@@ -1,0 +1,5 @@
+- include: packages.yml
+- include: git-repos.yml
+- include: keylime.yml
+- include: rust-install.yml
+- include: rust-keylime.yml
