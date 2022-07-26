@@ -9,23 +9,22 @@
         - gdisk 
         - parted
         - dosfstools
-        - sgdisk
       state: latest
 
 - name: Convert root volume from MBR to GPT, BIOS partition
-  shell: "sgdisk /dev/nvme1n0 -n=2:34:2047 -t ef02"
+  shell: "sgdisk /dev/nvme0n1 -n=2:34:2047 -t=2:ef02 -g"
   args:
     chdir: /root/
   changed_when: false
 
 - name: Reload partition table 
-  shell: "partprobe /dev/nvme1n0"
+  shell: "partprobe /dev/nvme0n1"
   args:
     chdir: /root/
   changed_when: false
 
 - name: Create EFI parition 
-  shell: "sgdisk /dev/nvme1n1 -n=1:0:0"
+  shell: "sgdisk /dev/nvme1n1 -n=1:0:0 -g"
   args:
     chdir: /root/
   changed_when: false
@@ -71,7 +70,7 @@
         - openssl
         - pesign 
         - sbsigntools
-        - kernel-devel-$(uname -r)
+        - kernel-devel-5.11.12-300.fc34.x86_64
         - git 
       state: latest
 
@@ -179,7 +178,7 @@
 
 - name: Clone awslabs/python-uefivars
   git:
-    repo: https://github.com/kawslabs/python-uefivars
+    repo: https://github.com/awslabs/python-uefivars
     dest: /root/python-uefivars
 
 - name: Install awslabs/python-uefivars requirments
