@@ -1,6 +1,66 @@
 ---
-- hosts: all
+- name: Create AWS base instance
+  hosts: localhost
+  gather_facts: False
+  var:
+    - aws_access_key: "{{ lookup('ansible.builtin.env', 'AWS_ACCESS_KEY') }}"
+    - aws_secret_key: "{{ lookup('ansible.builtin.env', 'AWS_SECRET_KEY') }}"
+    - aws_region: "{{ lookup('ansible.builtin.env', 'AWS_REGION') }}"
+    - aws_key: "{{ lookup('ansible.builtin.env', 'AWS_KEY') }}"
+    - aws_security_group: "{{ lookup('ansible.builtin.env', 'AWS_SECURITY_GROUP') }}"
+  roles:
+    - create-base-instance
+  post_tasks:
+    - name: Wait to SSH into instance
+      wait_for: delay=5 sleep=5 host={{ instance.instances[0].network_interfaces[0].association.public_ip }} port=22 state=started timeout=100
+
+- name: BIOS->UEFI, Partition, and Self-sign 
+  hosts: base_instance
+  remote_user: fedora
   become: true
   become_user: root
   roles:
     - aws-tpm 
+
+- name: Create snapshots
+  hosts: localhost
+  gather_facts: False 
+   var:
+    - aws_access_key: "{{ lookup('ansible.builtin.env', 'AWS_ACCESS_KEY') }}"
+    - aws_secret_key: "{{ lookup('ansible.builtin.env', 'AWS_SECRET_KEY') }}"
+    - aws_region: "{{ lookup('ansible.builtin.env', 'AWS_REGION') }}"
+  tasks:
+          - name: Snapshot root volume
+            amazon.aws.ec2_snapshot:
+                    instance_id: "{{ instance.instance_ids[0] }}"
+                    device_name: /dev/sda1
+                    region: "{{ aws_region }}"
+                    aws_access_key: "{{ aws_access_key }}"
+                    aws_secret_key: "{{ aws_secret_key }}"
+            register: root_snapshot
+
+          - name: Snapshot EFI FS
+            amazon.aws.ec2_snapshot:
+                    instance_id: "{{ instance.instance_ids[0] }}"
+                    device_name: /dev/sdb
+                    region: "{{ aws_region }}"
+                    aws_access_key: "{{ aws_access_key }}"                    
+                    aws_secret_key: "{{ aws_secret_key }}"
+            register: efi_snapshot
+
+            #- name: Create AMI 
+            #amazon.aws.ec2_ami:
+            #name: ansible/uefi/tpm 
+            #state: present
+            #architecture: x86_64
+            #virtualization_type: hvm
+            #root_device_name: /dev/sda1
+            #device_mapping:
+            #               - device_name: /dev/sda1
+            #                 snapshot_id: "{{ root_snapshot.snapshot_id }}"
+            #               - device_name: /dev/sdb
+            #                 snapshot_id: "{{ efi_snapshot.snapshot_id }}"
+            #       aws_access_key: "{{ aws_access_key }}"
+            #       aws_secret_key: "{{ aws_secret_key }}"
+            #       wait: yes
+            #       region: "{{ aws_region }}"

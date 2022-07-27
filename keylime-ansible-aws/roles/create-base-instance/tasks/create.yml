@@ -1,0 +1,30 @@
+- name: Create Fedora 34 instance in AWS
+  amazon.aws.ec2_instance:
+          name: "fedora/ansible"
+          key_name: "{{ aws_key_pair }}"
+          instance_type: c5.large
+          aws_access_key: "{{ aws_access_key }}"
+          aws_secret_key: "{{ aws_secret_key }}"
+          image:
+                  id: ami-0883f2d26628ad0cf
+          region: "{{ aws_region }}"
+          security_group: "{{ aws_security_group }}"
+          wait: yes
+          state: running
+          volumes:
+                  - device_name: /dev/sda1
+                    ebs:
+                            volume_size: 15
+                  - device_name: /dev/sdb
+                    ebs:
+                            volume_size: 15
+  register: instance
+
+- name: New AWS instance
+  debug:
+        msg: "{{ instance.instances[0].network_interfaces[0].association.public_ip }}"
+
+- name: Add new AWS instance to hosts
+  add_host:
+          hostname: "{{ instance.instances[0].network_interfaces[0].association.public_ip }}"
+          groups: base_instance
