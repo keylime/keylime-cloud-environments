@@ -1,14 +1,37 @@
+- name: Create SSH key pair for AWS
+  amazon.aws.ec2_key:
+          name: aws
+          region: "{{ aws_region }}"
+  register: ssh_key 
+
+- name: Save SSH private key in .ssh/aws.pem
+  copy: content={{ ssh_key.key.private_key }} dest=~/.ssh/aws.pem mode=600
+
+- name: Create security group 
+  amazon.aws.ec2_group:
+          name: ansible_sec_group
+          description: ansible security group 
+          aws_access_key: "{{ aws_access_key }}"
+          aws_secret_key: "{{ aws_secret_key }}"
+          region: "{{ aws_region }}"
+          rules:
+                  - proto: tcp 
+                    ports:
+                            - 22
+                    cidr_ip: 0.0.0.0/0
+  register: group
+  
 - name: Create Fedora 34 instance in AWS
   amazon.aws.ec2_instance:
           name: "fedora/ansible"
-          key_name: "{{ aws_key_pair }}"
+          key_name: aws
           instance_type: c5.large
           aws_access_key: "{{ aws_access_key }}"
           aws_secret_key: "{{ aws_secret_key }}"
           image:
                   id: ami-0883f2d26628ad0cf
           region: "{{ aws_region }}"
-          security_group: "{{ aws_security_group }}"
+          security_group: "{{ group.group_id }}"
           wait: yes
           state: running
           volumes:

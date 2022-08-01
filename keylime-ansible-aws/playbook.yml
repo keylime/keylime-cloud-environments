@@ -2,12 +2,10 @@
 - name: Create AWS base instance
   hosts: localhost
   gather_facts: False
-  var:
+  vars:
     - aws_access_key: "{{ lookup('ansible.builtin.env', 'AWS_ACCESS_KEY') }}"
     - aws_secret_key: "{{ lookup('ansible.builtin.env', 'AWS_SECRET_KEY') }}"
     - aws_region: "{{ lookup('ansible.builtin.env', 'AWS_REGION') }}"
-    - aws_key: "{{ lookup('ansible.builtin.env', 'AWS_KEY') }}"
-    - aws_security_group: "{{ lookup('ansible.builtin.env', 'AWS_SECURITY_GROUP') }}"
   roles:
     - create-base-instance
   post_tasks:
@@ -25,10 +23,10 @@
 - name: Create snapshots
   hosts: localhost
   gather_facts: False 
-   var:
-    - aws_access_key: "{{ lookup('ansible.builtin.env', 'AWS_ACCESS_KEY') }}"
-    - aws_secret_key: "{{ lookup('ansible.builtin.env', 'AWS_SECRET_KEY') }}"
-    - aws_region: "{{ lookup('ansible.builtin.env', 'AWS_REGION') }}"
+  vars:
+     - aws_access_key: "{{ lookup('ansible.builtin.env', 'AWS_ACCESS_KEY') }}"
+     - aws_secret_key: "{{ lookup('ansible.builtin.env', 'AWS_SECRET_KEY') }}"
+     - aws_region: "{{ lookup('ansible.builtin.env', 'AWS_REGION') }}"
   tasks:
           - name: Snapshot root volume
             amazon.aws.ec2_snapshot:

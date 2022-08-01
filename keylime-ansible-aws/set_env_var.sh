@@ -2,7 +2,7 @@
 usage() {
         echo "Usage: ./set_env_var.sh <AWS access key ID> <AWS secret key> <AWS region>"
 }
-if [[ ($# -ne 2) || ($@ == "--help") || ($@ == "-h") ]]
+if [[ ($# -ne 3) || ($@ == "--help") || ($@ == "-h") ]]
 then
         usage
         exit 1
