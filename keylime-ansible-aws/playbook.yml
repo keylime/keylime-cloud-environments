@@ -31,6 +31,7 @@
           - name: Snapshot root volume
             amazon.aws.ec2_snapshot:
                     instance_id: "{{ instance.instance_ids[0] }}"
+                    description: ansible root volume
                     device_name: /dev/sda1
                     region: "{{ aws_region }}"
                     aws_access_key: "{{ aws_access_key }}"
@@ -40,6 +41,7 @@
           - name: Snapshot EFI FS
             amazon.aws.ec2_snapshot:
                     instance_id: "{{ instance.instance_ids[0] }}"
+                    description: ansible efi volume
                     device_name: /dev/sdb
                     region: "{{ aws_region }}"
                     aws_access_key: "{{ aws_access_key }}"                    

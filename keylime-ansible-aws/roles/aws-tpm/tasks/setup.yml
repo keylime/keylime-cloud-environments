@@ -1,8 +1,3 @@
-- name: Update packages
-  dnf:
-      name: "*"
-      state: latest
-
 - name: Install prerequisite packages
   dnf:
       name:
@@ -193,6 +188,10 @@
     chdir: /root/
   changed_when: false
 
+- name: Copy blob from remote to local
+  fetch:
+          src: /root/blob.bin
+          dest: ~/blob.bin
 
 - name: Sign fedora/shimx64
   shell: "sbsign --key db.key --cert db.crt     --output /boot/efi/EFI/fedora/shimx64.efi     /boot/efi/EFI/fedora/shimx64.efi"

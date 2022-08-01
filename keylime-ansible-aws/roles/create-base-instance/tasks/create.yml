@@ -9,7 +9,7 @@
 
 - name: Create security group 
   amazon.aws.ec2_group:
-          name: ansible_sec_group
+          name: ansible_group
           description: ansible security group 
           aws_access_key: "{{ aws_access_key }}"
           aws_secret_key: "{{ aws_secret_key }}"
