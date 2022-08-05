@@ -6,7 +6,7 @@ For details on using Keylime, please consult the
 
 For details on the Rust agent, please consult the [repository](https://github.com/keylime/rust-keylime).
 
-## Developement
+## Development
 **This role is not ready for use.** The ansible AWS module currently does not have the functionality to create an AMI with UEFI and TPM enabled. 
 A [issue](https://github.com/ansible-collections/amazon.aws/issues/944) has been opened regarding this.
 
@@ -16,13 +16,14 @@ self-signs binaries, and then takes snapshots of both volumes. From here, these 
 
 ### Next steps
 Once the ansible/aws ec2 ami module has the ability to support uefi/tpm, the next steps for this playbook are:
-1. Use the snapshots to create an AMI with UEFI + TPM
+1. Use the snapshots to create an AMI with UEFI + TPM 
+   1. The binay blob is exported from remote to local (`~/blob.bin`), this needed to be used in AMI creation. 
 2. Add a task that creates an instance with this AMI
-3. Create a role to install keylime on the new instance
 
 ### Potential blockers 
 1. Automating the EC2 serial console to boot via the UEFI shell (required for boot)
-
+2. Differences in instance snapshot vs volume snapshot
+   Note: Only single volume snapshots are available in the anisble collection. All the instructions in this playbook mirror the manual set up exactly, except for the difference in snapshot type. Currently, an instance created by the snapshots resulting from this playbook fails to boot. From the UEFI shell, it falls into grub after exceuting the bootloader. This behavior is not expected.
 ## Configuration 
 1. Install dependencies \
 `$ pip3 install boto3 botocore ` 
@@ -51,27 +52,8 @@ private_key_file=~/.ssh/aws.pem
 Run the playbook to create and set up an instance.
 
 ```bash
-ansible-playbook playbook.yml
+ansible-playbook create_aws_instance.yml
 ```
-## Getting started with Keylime 
-The best way to get started is to read the [Keylime
-Documentation](https://keylime-docs.readthedocs.io/en/latest/), however if you're keen to get started right away, follow these steps.
+## Keylime Installation 
+To deploy keylime on this new VM against the vTPM, use this [ansible-keylime role](https://github.com/keylime/ansible-keylime)
 
-To start the Keylime verifier and registrar, you will need to start the following services. 
-
-`# keylime_verifier`
-
-`# keylime_registrar`
-
-To start the Keylime rust agent, navigate to the rust-keylime directory and run the following command.
-
-`# RUST_LOG=keylime_agent=trace cargo run --bin keylime_agent`
-
-To register the agent, run the tenant. \
-`# keylime_tenant -v 127.0.0.1 -t 127.0.0.1 -u d432fbb3-d2f1-4a97-9ef7-75bd81c00000 -f /root/excludes.txt --allowlist /root/allowlist.txt --exclude /root/excludes.txt -c add`
-
-You can now set up a use case, a good first scenario to try out would be [IMA
-Integrity Monitoring](https://keylime-docs.readthedocs.io/en/latest/user_guide/runtime_ima.html)
-
-For more detailed set up scenarios, see the [Keylime
-documentation](https://keylime-docs.readthedocs.io/en/latest/user_guide/runtime_ima.html)
