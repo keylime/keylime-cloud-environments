@@ -1,0 +1,342 @@
+---
+- name: Create AWS base instance
+  hosts: localhost
+  gather_facts: False
+  vars:
+    - aws_access_key: "{{ lookup('ansible.builtin.env', 'AWS_ACCESS_KEY') }}"
+    - aws_secret_key: "{{ lookup('ansible.builtin.env', 'AWS_SECRET_KEY') }}"
+    - aws_region: "{{ lookup('ansible.builtin.env', 'AWS_REGION') }}"
+  tasks:
+    - name: Create SSH key pair for AWS
+      amazon.aws.ec2_key:
+         name: ansible
+         region: "{{ aws_region }}"
+      register: ssh_key
+
+    - name: Save SSH private key in .ssh/ansible.pem
+      copy: content={{ ssh_key.key.private_key }} dest=~/.ssh/ansible.pem mode=600
+
+    - name: Create security group
+      amazon.aws.ec2_group:
+         name: ansible_group
+         description: ansible security group
+         aws_access_key: "{{ aws_access_key }}"
+         aws_secret_key: "{{ aws_secret_key }}"
+         region: "{{ aws_region }}"
+         rules:
+            - proto: tcp
+              ports:
+                 - 22
+              cidr_ip: 0.0.0.0/0
+      register: group
+
+    - name: Create Fedora 34 instance in AWS
+      amazon.aws.ec2_instance:
+         name: "fedora/ansible"
+         key_name: ansible
+         instance_type: c5.large
+         aws_access_key: "{{ aws_access_key }}"
+         aws_secret_key: "{{ aws_secret_key }}"
+         image:
+            id: ami-0883f2d26628ad0cf
+         region: "{{ aws_region }}"
+         security_group: "{{ group.group_id }}"
+         wait: yes
+         state: running
+         volumes:
+            - device_name: /dev/sda1
+              ebs:
+                 volume_size: 15
+            - device_name: /dev/sdb
+              ebs:
+                 volume_size: 15
+      register: instance
+
+    - name: New AWS instance
+      debug:
+         msg: "{{ instance.instances[0].network_interfaces[0].association.public_ip }}"
+
+    - name: Add new AWS instance to hosts
+      add_host:
+        hostname: "{{ instance.instances[0].network_interfaces[0].association.public_ip }}"
+        groups: base_instance
+
+  post_tasks:
+     - name: Wait to SSH into instance
+       wait_for: delay=5 sleep=5 host={{ instance.instances[0].network_interfaces[0].association.public_ip }} port=22 state=started timeout=100
+
+- name: Configure the OS 
+  hosts: base_instance
+  remote_user: fedora
+  become: true
+  become_user: root
+  tasks:
+    - name: Install prerequisite packages
+      dnf:
+        name:
+          - gdisk 
+          - parted
+          - dosfstools
+        state: latest
+
+    - name: Convert root volume from MBR to GPT, BIOS partition
+      shell: "sgdisk /dev/nvme0n1 -n=2:34:2047 -t=2:ef02 -g"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Reload partition table 
+      shell: "partprobe /dev/nvme0n1"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Create EFI parition 
+      shell: "sgdisk /dev/nvme1n1 -n=1:0:0 -g"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Reload partition table 
+      shell: "partprobe /dev/nvme1n1"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Build file system for the EFI system partition
+      shell: "mkfs.vfat  /dev/nvme1n1p1"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Mount the EFI system partition to /boot/efi 
+      shell: "mount /dev/nvme1n1p1 /boot/efi"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Install the bootloader
+      dnf:
+         name:
+           - grub2-efi
+           - grub2-efi-modules
+           - shim 
+         state: latest
+
+    - name: Create grub configurations
+      shell: "grub2-mkconfig -o /boot/grub2/grub.cfg"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Install dependencies for making keys and signing binaries
+      dnf:
+          name:
+            - efitools
+            - keyutils
+            - mokutil
+            - openssl
+            - pesign 
+            - sbsigntools
+            - kernel-devel-5.11.12-300.fc34.x86_64
+            - git 
+          state: latest
+
+    - name: Generate random GUID
+      shell: "uuidgen --random > GUID.txt"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Create platform key PK 
+      shell: 'openssl req -newkey rsa:4096 -nodes -keyout PK.key -new -x509 -sha256 -days 3650 -subj "/CN=Platform key/" -out PK.crt 2>/dev/null'
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Sign platform key PK 
+      shell: "openssl x509 -outform DER -in PK.crt -out PK.cer"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Add PK cert to EFI sign list 
+      shell: 'cert-to-efi-sig-list -g "$(< GUID.txt)" PK.crt PK.esl'
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Sign EFI signature list with PK 
+      shell: 'sign-efi-sig-list -g "$(< GUID.txt)" -k PK.key -c PK.crt PK PK.esl PK.auth'
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Create exchange key EK 
+      shell: 'openssl req -newkey rsa:4096 -nodes -keyout KEK.key -new -x509 -sha256 -days 3650 -subj "/CN=Key Exchange Key/" -out KEK.crt 2>/dev/null'
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Sign exchange key EK 
+      shell: "openssl x509 -outform DER -in KEK.crt -out KEK.cer"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Add EK cert to EFI sign list 
+      shell: 'cert-to-efi-sig-list -g "$(< GUID.txt)" KEK.crt KEK.esl'
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Sign EFI signature list with PK 
+      shell: 'sign-efi-sig-list -g "$(< GUID.txt)" -k PK.key -c PK.crt KEK KEK.esl KEK.auth'
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Create signature allowed database DB 
+      shell: 'openssl req -newkey rsa:4096 -nodes -keyout db.key -new -x509 -sha256 -days 3650 -subj "/CN=Signature Database key/" -out db.crt 2>/dev/null'
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Sign DB
+      shell: "openssl x509 -outform DER -in db.crt -out db.cer"
+      args: 
+        chdir: /root/
+      changed_when: false
+
+    - name: Add DB cert to EFI sign list 
+      shell: 'cert-to-efi-sig-list -g "$(< GUID.txt)" db.crt db.esl'
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Sign EFI signature list with KEK 
+      shell: 'sign-efi-sig-list -g "$(< GUID.txt)" -k KEK.key -c KEK.crt db db.esl db.auth'
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Create signature disallowed database DBX
+      shell: 'openssl req -newkey rsa:4096 -nodes -keyout dbx.key -new -x509 -sha256 -days 3650 -subj "/CN=Signature Excluded Database key/" -out dbx.crt 2>/dev/null'
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Sign DBX
+      shell: "openssl x509 -outform DER -in dbx.crt -out dbx.cer"
+      args: 
+        chdir: /root/
+      changed_when: false
+
+    - name: Add DBX cert to EFI sign list 
+      shell: 'cert-to-efi-sig-list -g "$(< GUID.txt)" dbx.crt dbx.esl'
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Sign EFI signature list with KEK 
+      shell: 'sign-efi-sig-list -g "$(< GUID.txt)" -k KEK.key -c KEK.crt dbx dbx.esl dbx.auth'
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Clone awslabs/python-uefivars
+      git:
+        repo: https://github.com/awslabs/python-uefivars
+        dest: /root/python-uefivars
+
+    - name: Install awslabs/python-uefivars requirments
+      shell: "/usr/bin/pip3 install  crc32c"
+      args:
+        chdir: /root/python-uefivars
+      changed_when: false
+
+    - name: Create blob to export keys
+      shell: "./python-uefivars/uefivars.py -i none -o aws -O blob.bin -P PK.esl -K KEK.esl --db db.esl --dbx dbx.esl"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Copy blob from remote to local
+      fetch:
+          src: /root/blob.bin
+          dest: ~/blob.bin
+
+    - name: Sign fedora/shimx64
+      shell: "sbsign --key db.key --cert db.crt     --output /boot/efi/EFI/fedora/shimx64.efi     /boot/efi/EFI/fedora/shimx64.efi"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Sign kernel
+      shell: "sbsign --key db.key --cert db.crt     --output /boot/vmlinuz-$(uname -r)     /boot/vmlinuz-$(uname -r)"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Sign fedora/grubx64
+      shell: "sbsign --key db.key --cert db.crt     --output /boot/efi/EFI/fedora/grubx64.efi     /boot/efi/EFI/fedora/grubx64.efi"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Sign fedora/mm64
+      shell: "sbsign --key db.key --cert db.crt     --output /boot/efi/EFI/fedora/mmx64.efi     /boot/efi/EFI/fedora/mmx64.efi"
+      args:
+        chdir: /root/
+      changed_when: false
+
+    - name: Sign fedora/shim 
+      shell: "sbsign --key db.key --cert db.crt     --output /boot/efi/EFI/fedora/shim.efi     /boot/efi/EFI/fedora/shim.efi"
+      args:
+        chdir: /root/
+      changed_when: false
+
+- name: Create snapshots
+  hosts: localhost
+  gather_facts: False 
+  vars:
+     - aws_access_key: "{{ lookup('ansible.builtin.env', 'AWS_ACCESS_KEY') }}"
+     - aws_secret_key: "{{ lookup('ansible.builtin.env', 'AWS_SECRET_KEY') }}"
+     - aws_region: "{{ lookup('ansible.builtin.env', 'AWS_REGION') }}"
+  tasks:
+     - name: Snapshot root volume
+       amazon.aws.ec2_snapshot:
+          instance_id: "{{ instance.instance_ids[0] }}"
+          description: ansible root volume
+          device_name: /dev/sda1
+          region: "{{ aws_region }}"
+          aws_access_key: "{{ aws_access_key }}"
+          aws_secret_key: "{{ aws_secret_key }}"
+       register: root_snapshot
+
+     - name: Snapshot EFI FS
+       amazon.aws.ec2_snapshot:
+          instance_id: "{{ instance.instance_ids[0] }}"
+          description: ansible efi volume
+          device_name: /dev/sdb
+          region: "{{ aws_region }}"
+          aws_access_key: "{{ aws_access_key }}"                    
+          aws_secret_key: "{{ aws_secret_key }}"
+       register: efi_snapshot
+
+      #- name: Create AMI 
+         #amazon.aws.ec2_ami:
+         #name: ansible/uefi/tpm 
+         #state: present
+         #architecture: x86_64
+         #virtualization_type: hvm
+         #root_device_name: /dev/sda1
+         #device_mapping:
+         #               - device_name: /dev/sda1
+         #                 snapshot_id: "{{ root_snapshot.snapshot_id }}"
+         #               - device_name: /dev/sdb
+         #                 snapshot_id: "{{ efi_snapshot.snapshot_id }}"
+         #       aws_access_key: "{{ aws_access_key }}"
+         #       aws_secret_key: "{{ aws_secret_key }}"
+         #       wait: yes
+         #       region: "{{ aws_region }}"
