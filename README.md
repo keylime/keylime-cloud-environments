@@ -11,12 +11,12 @@ See the [README](https://github.com/keylime/keylime-cloud-environments/tree/main
 Ansible role to deploy a Fedora 35 instance on AWS with [Keylime](https://github.com/keylime/keylime) and the [rust agent](https://github.com/keylime/rust-keylime) against a Virtualized TPM.
 This role is currently in developement. 
 
-<<<<<<< HEAD
 See the [README](https://github.com/keylime/keylime-cloud-environments/tree/main/keylime-ansible-aws) for further information.
 
 ## Keylime on Azure
 The ansible collection for Azure does not yet have the functionality to create a VM with 'Trusted Launch' (enable the vTPM). Manual set up instructions can be found in the [README]((https://github.com/keylime/keylime-cloud-environments/tree/main/keylime-azure) until making an ansible role is possible. 
  
-=======
 See the [README](https://github.com/keylime/keylime-cloud-environments/tree/main/keylime-ansible-aws) for further information. 
->>>>>>> ad114f2 (Add ansible role for AWS)
+
+## Keylime on Azure
+The ansible collection for Azure does not yet have the functionality to create a VM with 'Trusted Launch' (enable the vTPM). Manual set up instructions can be found in the [README]((https://github.com/keylime/keylime-cloud-environments/tree/main/keylime-azure) until making an ansible role is possible.
