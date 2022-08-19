@@ -29,13 +29,13 @@ Once the ansible/aws ec2 ami module has the ability to support uefi/tpm, the nex
 `$ pip3 install boto3 botocore ` 
 2. Install amazon.aws module for ansible \
 `$ ansible-galaxy collection install amazon.aws `
-3. Create and record the access key ID and secret key for your AWS account
+3. Create an access key for your AWS account
    1. Navigate to the 'IAM' section of the AWS console
    2. On the IAM dashboard, select 'Users'
    3. Select your user
    4. Select 'Security credentials'
    5. Click 'Create access key'
-   6. Record your Access key ID and secret key for authenticating the playbook
+   6. Save the .csv file, it will be used to authenticate the playbook. 
 4. The playbook will generate a SSH key pair named 'ansible', add this path to an ansible configuration file in the current directory (`ansible.cfg`)
 ```
 [defaults]
@@ -45,7 +45,7 @@ private_key_file=~/.ssh/ansible.pem
 5. Run script to configure environment for ansible. 
 ```
 ./set_env_var.sh --help
-"Usage: ./set_env_var.sh <AWS access key ID> <AWS secret key> <AWS region>" 
+Usage: ./set_env_var.sh <path to AWS key .csv> <AWS region>
 ```
 ## Usage 
 Run the playbook to create and set up an instance.
